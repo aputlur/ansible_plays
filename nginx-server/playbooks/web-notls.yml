@@ -1,0 +1,74 @@
+---
+
+- name: Configure webserver with nginx in Centos7
+  hosts: webservers
+  become: True
+  vars:
+    key_file: /etc/nginx/ssl/nginx.key
+    cert_file: /etc/nginx/ssl/nginx.crt
+    conf_file: /etc/nginx/sites-available/default
+    server_name: localhost
+
+  tasks:
+     - name: check the nginx-release in repository
+       shell: rpm -qa | grep nginx-release
+       register: result
+       ignore_errors: true
+       always_run: yes
+       changed_when: no
+
+     - name: add repository nginx-release
+       yum: name="http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm"
+       when: result is failed
+
+     - name: install nginx
+       yum: name=nginx
+       #action: yum name=nginx -- Another way
+
+     - name: create directory sites-available
+       file: path=/etc/nginx/sites-available state=directory owner=root mode=0600
+
+     - name: create directory /etc/nginx/sites-enabled
+       file: path=/etc/nginx/sites-enabled state=directory owner=root mode=0600
+
+     - name: create file default
+       file: path=/etc/nginx/sites-available/default state=touch owner=root mode=0600
+
+     - name: create file default under sites-enabled
+       file: path=/etc/nginx/sites-enabled/default state=touch owner=root mode=0600
+
+     - name: copy nginx config file
+       copy: src=files/nginx.conf dest=/etc/nginx/conf.d/default.conf owner=root mode=0600
+
+     - name: create directory for ssl certificates
+       file: path=/etc/nginx/ssl state=directory
+
+     - name: copy TLS key
+       copy: src=files/nginx.key dest={{ key_file }} owner=root mode=0600
+
+     - name: copy TLS Certificate
+       copy: src=files/nginx.crt dest={{ cert_file }} owner=root mode=0600
+
+     - name: copy nginx config file
+       template: src=templates/nginx.conf.j2 dest={{ conf_file }}
+       notify: restart nginx
+
+#     - name: enable configuration
+#       file: dest=/etc/nginx/sites-enabled/default src= {{ conf_file }} state=link force=yes owner=root mode=0600
+#       notify: restart nginx
+
+     - file:
+         path: /tmp/tmp1
+         state: directory
+         mode: 0755
+
+     - name: copy index.html
+       template: src=templates/index.html.j2 dest=/usr/share/nginx/html/index.html
+         mode=0644
+
+     - name: restart nginx
+       service: name=nginx state=restarted
+
+  handlers:
+     - name: restart nginx
+       service: name=nginx state=restarted
